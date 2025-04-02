@@ -244,140 +244,137 @@ pnpm dev
 ```
 
 ## Build your own plugins
+# Plugin Development Guide
 
-Using plugins, you can:
+This guide provides detailed instructions on creating, configuring, and debugging plugins for YouTube Music.
 
-- manipulate the app - the `BrowserWindow` from electron is passed to the plugin handler
-- change the front by manipulating the HTML/CSS
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Creating a Plugin](#creating-a-plugin)
+3. [Plugin Configuration Options](#plugin-configuration-options)
+4. [Example Plugins](#example-plugins)
+5. [Debugging Plugins](#debugging-plugins)
+6. [Contributing](#contributing)
 
-### Creating a plugin
+---
 
-Create a folder in `src/plugins/YOUR-PLUGIN-NAME`:
+## Introduction
 
-- `index.ts`: the main file of the plugin
-```typescript
-import style from './style.css?inline'; // import style as inline
+Plugins extend the functionality of YouTube Music by modifying the UI, adding new features, or integrating with external services. This guide explains how to create and manage plugins effectively.
 
+---
+
+## Creating a Plugin
+
+To create a plugin, follow these steps:
+
+1. **Import the `createPlugin` utility** from the YouTube Music plugin system.
+2. **Define the plugin configuration**, including metadata, styles, and functionality.
+3. **Export the plugin** so that it can be registered by the application.
+
+### Basic Plugin Structure
+
+```ts
 import { createPlugin } from '@/utils';
 
 export default createPlugin({
-  name: 'Plugin Label',
-  restartNeeded: true, // if value is true, ytmusic show restart dialog
+  name: 'Sample Plugin',
+  restartNeeded: false,
   config: {
-    enabled: false,
-  }, // your custom config
-  stylesheets: [style], // your custom style,
-  menu: async ({ getConfig, setConfig }) => {
-    // All *Config methods are wrapped Promise<T>
-    const config = await getConfig();
-    return [
-      {
-        label: 'menu',
-        submenu: [1, 2, 3].map((value) => ({
-          label: `value ${value}`,
-          type: 'radio',
-          checked: config.value === value,
-          click() {
-            setConfig({ value });
-          },
-        })),
-      },
-    ];
+    enabled: true,
   },
-  backend: {
-    start({ window, ipc }) {
-      window.maximize();
-
-      // you can communicate with renderer plugin
-      ipc.handle('some-event', () => {
-        return 'hello';
-      });
-    },
-    // it fired when config changed
-    onConfigChange(newConfig) { /* ... */ },
-    // it fired when plugin disabled
-    stop(context) { /* ... */ },
+  start() {
+    console.log('Sample Plugin Activated');
   },
-  renderer: {
-    async start(context) {
-      console.log(await context.ipc.invoke('some-event'));
-    },
-    // Only renderer available hook
-    onPlayerApiReady(api: YoutubePlayer, context: RendererContext) {
-      // set plugin config easily
-      context.setConfig({ myConfig: api.getVolume() });
-    },
-    onConfigChange(newConfig) { /* ... */ },
-    stop(_context) { /* ... */ },
-  },
-  preload: {
-    async start({ getConfig }) {
-      const config = await getConfig();
-    },
-    onConfigChange(newConfig) {},
-    stop(_context) {},
-  },
+  stop() {
+    console.log('Sample Plugin Deactivated');
+  }
 });
 ```
 
-### Common use cases
+---
 
-- injecting custom CSS: create a `style.css` file in the same folder then:
+## Plugin Configuration Options
 
-```typescript
-// index.ts
-import style from './style.css?inline'; // import style as inline
+Each plugin supports various configuration options. The table below explains their usage:
 
+| Config Option    | Description                                       | Example |
+|-----------------|---------------------------------------------------|---------|
+| `name`          | Plugin name                                       | `'Dark Mode Toggle'` |
+| `restartNeeded` | Determines if app restart is required             | `true / false` |
+| `config`        | Custom plugin settings                            | `{ enabled: true }` |
+| `stylesheets`   | Inject custom styles                              | `['body { background: black; color: white; }']` |
+| `start`         | Executes when the plugin is enabled               | `() => console.log('Activated')` |
+| `stop`          | Executes when the plugin is disabled              | `() => console.log('Deactivated')` |
+| `menu`          | Adds options to the plugin settings menu          | `{ label: 'Plugin Settings' }` |
+| `backend`       | Allows interactions with Electron’s backend       | `start({ window }) { window.maximize(); }` |
+
+---
+
+## Example Plugins
+
+### 1. Dark Mode Plugin
+
+```ts
 import { createPlugin } from '@/utils';
 
 export default createPlugin({
-  name: 'Plugin Label',
-  restartNeeded: true, // if value is true, ytmusic will show a restart dialog
-  config: {
-    enabled: false,
-  }, // your custom config
-  stylesheets: [style], // your custom style
-  renderer() {} // define renderer hook
+  name: 'Dark Mode',
+  restartNeeded: false,
+  stylesheets: [
+    `body { background-color: black !important; color: white !important; }`
+  ],
 });
 ```
 
-- If you want to change the HTML:
+### 2. Custom Menu Plugin
 
-```typescript
+```ts
 import { createPlugin } from '@/utils';
 
 export default createPlugin({
-  name: 'Plugin Label',
-  restartNeeded: true, // if value is true, ytmusic will show the restart dialog
-  config: {
-    enabled: false,
-  }, // your custom config
-  renderer() {
-    // Remove the login button
-    document.querySelector(".sign-in-link.ytmusic-nav-bar").remove();
-  } // define renderer hook
+  name: 'Custom Menu',
+  restartNeeded: false,
+  menu: {
+    label: 'My Plugin',
+    submenu: [
+      { label: 'Option 1', click() { console.log('Clicked Option 1'); } },
+      { label: 'Option 2', click() { console.log('Clicked Option 2'); } }
+    ]
+  }
 });
 ```
 
-- communicating between the front and back: can be done using the ipcMain module from electron. See `index.ts` file and
-  example in `sponsorblock` plugin.
+---
 
-## Build
+## Debugging Plugins
 
-1. Clone the repo
-2. Follow [this guide](https://pnpm.io/installation) to install `pnpm`
-3. Run `pnpm install --frozen-lockfile` to install dependencies
-4. Run `pnpm build:OS`
+To debug plugins effectively:
 
-- `pnpm dist:win` - Windows
-- `pnpm dist:linux` - Linux (amd64)
-- `pnpm dist:linux:deb-arm64` - Linux (arm64 for Debian)
-- `pnpm dist:linux:rpm-arm64` - Linux (arm64 for Fedora)
-- `pnpm dist:mac` - macOS (amd64)
-- `pnpm dist:mac:arm64` - macOS (arm64)
+1. **Use `console.log()`** to output messages for debugging.
+2. **Inspect the DevTools Console** by pressing `Ctrl + Shift + I` in the app.
+3. **Check for errors in the logs** under `renderer` processes.
+4. **Disable conflicting plugins** if unexpected behavior occurs.
 
-Builds the app for macOS, Linux, and Windows,
-using [electron-builder](https://github.com/electron-userland/electron-builder).
+Example:
+```ts
+start() {
+  console.log('Debugging Plugin: Activated');
+}
+```
+
+---
+
+## Contributing
+
+To contribute your plugin improvements:
+
+1. Fork the repository.
+2. Navigate to the `docs` or `README.md` file.
+3. Apply your documentation updates.
+4. Submit a Pull Request with a clear title and description.
+
+**Example PR Title:** "Improved Plugin Documentation - Added examples, explanations, and debugging guide."
 
 ## Production Preview
 
